@@ -1,4 +1,5 @@
 #include <sys/mount.h>
+#include <unordered_map>
 
 #include <magisk.hpp>
 #include <utils.hpp>
@@ -16,6 +17,32 @@ void fstab_entry::to_file(FILE *fp) {
 #define set_info(val) \
 line[val##1] = '\0'; \
 entry.val = &line[val##0];
+
+static void read_fstab_file(const char *fstab_file, vector<fstab_entry> &fstab) {
+    file_readline(fstab_file, [&](string_view l) -> bool {
+        if (l[0] == '#' || l.length() == 1)
+            return true;
+        char *line = (char *) l.data();
+
+        int dev0, dev1, mnt_point0, mnt_point1, type0, type1,
+            mnt_flags0, mnt_flags1, fsmgr_flags0, fsmgr_flags1;
+
+        sscanf(line, "%n%*s%n %n%*s%n %n%*s%n %n%*s%n %n%*s%n",
+               &dev0, &dev1, &mnt_point0, &mnt_point1, &type0, &type1,
+               &mnt_flags0, &mnt_flags1, &fsmgr_flags0, &fsmgr_flags1);
+
+        fstab_entry entry;
+
+        set_info(dev)
+        set_info(mnt_point)
+        set_info(type)
+        set_info(mnt_flags)
+        set_info(fsmgr_flags)
+
+        fstab.emplace_back(move(entry));
+        return true;
+    });
+}
 
 #define FSR "/first_stage_ramdisk"
 
@@ -91,29 +118,34 @@ exit_loop:
         init.patch({ make_pair("android,fstab", "xxx") });
     } else {
         // Parse and load the fstab file
-        file_readline(fstab_file, [&](string_view l) -> bool {
-            if (l[0] == '#' || l.length() == 1)
-                return true;
-            char *line = (char *) l.data();
+        read_fstab_file(fstab_file, fstab);
+    }
 
-            int dev0, dev1, mnt_point0, mnt_point1, type0, type1,
-                    mnt_flags0, mnt_flags1, fsmgr_flags0, fsmgr_flags1;
+    // Append oppo's custom fstab
+    if (access("oplus.fstab", F_OK) == 0) {
+        LOGD("Found fstab file: %s\n", "oplus.fstab");
+        vector<fstab_entry> oplus_fstab;
+        unordered_map<string, string> bind_map;
 
-            sscanf(line, "%n%*s%n %n%*s%n %n%*s%n %n%*s%n %n%*s%n",
-                   &dev0, &dev1, &mnt_point0, &mnt_point1, &type0, &type1,
-                   &mnt_flags0, &mnt_flags1, &fsmgr_flags0, &fsmgr_flags1);
+        read_fstab_file("oplus.fstab", oplus_fstab);
 
-            fstab_entry entry;
+        for (auto &entry : oplus_fstab) {
+            if (entry.mnt_flags.find("bind") != string::npos) {
+                bind_map.emplace(entry.dev, entry.mnt_point);
+                entry.dev = "";
+            }
+        }
 
-            set_info(dev);
-            set_info(mnt_point);
-            set_info(type);
-            set_info(mnt_flags);
-            set_info(fsmgr_flags);
+        for (auto &entry : oplus_fstab) {
+            if (entry.dev.empty())
+                continue;
+            auto got = bind_map.find(entry.mnt_point);
+            if (got != bind_map.end())
+                entry.mnt_point = got->second;
+            fstab.push_back(move(entry));
+        }
 
-            fstab.emplace_back(std::move(entry));
-            return true;
-        });
+        unlink("oplus.fstab");
     }
 
     {
