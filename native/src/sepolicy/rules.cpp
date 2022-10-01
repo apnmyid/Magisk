@@ -181,6 +181,10 @@ void sepolicy::magisk_rules() {
     allow("zygote", "zygote", "capability", "sys_resource");  // prctl PR_SET_MM
     allow("zygote", "zygote", "process", "execmem");
     allow("zygote", "fs_type", "filesystem", "unmount");
+    allow("zygote", "fs_type", "filesystem", "mount");
+    allow("zygote", "fs_type", "filesystem", "remount");
+    allow("zygote", ALL, "dir", "mounton");
+    allow("zygote", ALL, "file", "mounton");
     allow("system_server", "system_server", "process", "execmem");
 
     // Shut llkd up

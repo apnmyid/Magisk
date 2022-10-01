@@ -395,7 +395,7 @@ int enable_whitelist(){
 int disable_whitelist(){
     if (!hide_whitelist)
         return DenyResponse::OK;
-        
+
     LOGI("* Disable MagiskHideAll\n");
 
     hide_whitelist = false;
@@ -405,7 +405,6 @@ int disable_whitelist(){
 
 
 int enable_deny(bool props) {
-    string logcat_dir = MAGISKTMP + "/" INTLROOT "/logcat";
     if (denylist_enforced) {
         return DenyResponse::OK;
     } else {
@@ -429,8 +428,6 @@ int enable_deny(bool props) {
             return DenyResponse::ERROR;
         }
         if (!zygisk_enabled) {
-            rm_rf(logcat_dir.data());
-            xsymlink("/system/bin/logcat", logcat_dir.data());
             auto ret1 = new_daemon_thread(&proc_monitor);
             if (ret1){
                 // cannot start monitor_proc, return daemon error
@@ -850,9 +847,6 @@ check_and_hide:
     // stop app process as soon as possible and do check if this process is target or not
     kill(pid, SIGSTOP);
 
-    if (!is_deny_target(uid, cmdline, 95))
-            goto not_target;
-
     // Ensure ns is separated
     read_ns(pid, &st);
     for (auto &zit : zygote_map) {
@@ -865,18 +859,25 @@ check_and_hide:
         }
     }
 
+    if (!is_deny_target(uid, cmdline, 95)) {
+        // load all mounts
+        load_custom_mount(pid, uid % 100000, cmdline);
+        goto not_target;
+    }
+
     // Finally this is our target
-    // Detach but the process should still remain stopped
+    // We stop target process and do all unmounts
     // The hide daemon will resume the process after hiding it
-    // Note that we are now in "PTRACE_EVENT stop", not "signal-delivery-stop",
-    // signal injection (PTRACE_restart with signal) may simply be ignored, so use kill() instead
     LOGI("proc_monitor: [%s] PID=[%d] UID=[%d]\n", cmdline, pid, uid);
+
+    // load all mounts first, overwise app in hidelist can't load custom mounts
+    load_custom_mount(pid, uid % 100000, cmdline);
+    // hide magisk
     revert_unmount(pid);
     kill(pid, SIGCONT);
     return true;
 
 not_target:
-    //LOGD("proc_monitor: [%s] is not our target\n", cmdline);
     kill(pid, SIGCONT);
     return true;
 }
@@ -970,6 +971,8 @@ void proc_monitor() {
     int pipe_pid = 0;
     string logcat_dir = MAGISKTMP + "/" INTLROOT "/logcat";
     char logcat_cmd[128];
+    rm_rf(logcat_dir.data());
+    xsymlink("/system/bin/logcat", logcat_dir.data());
     sprintf(logcat_cmd, "echo \"PID=$$\"; %s -b all -c; %s Zygote:* *:S Magisk:S", logcat_dir.data(), logcat_dir.data());
     pipe_fp = popen(logcat_cmd , "r");
     fscanf(pipe_fp, "PID=%d", &pipe_pid);
@@ -990,6 +993,8 @@ void proc_monitor() {
                 // close pipe
                 if (pipe_fp) pclose(pipe_fp); 
                 // open new pipe
+                rm_rf(logcat_dir.data());
+                xsymlink("/system/bin/logcat", logcat_dir.data());
                 pipe_fp = popen(logcat_cmd, "r");
                 // get pid of pipe
                 fscanf(pipe_fp, "PID=%d", &pipe_pid);

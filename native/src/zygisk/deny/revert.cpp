@@ -26,6 +26,21 @@ void revert_daemon(int pid, int client) {
     }
 }
 
+void load_custom_mount(int pid, int uid, const char *process) {
+    if (pid > 0) {
+        if (switch_mnt_ns(pid))
+            return;
+    }
+    char path[128];
+    char mnt_entry[1024];
+    sprintf(mnt_entry, "%s/" INTLROOT "/mnt_entry/%d", MAGISKTMP.data(), uid);
+    if (access(mnt_entry,F_OK)==0){
+        LOGD("dyn_mount: load mounts (%s)\n", process);
+        if (load_mount(mnt_entry)==-1)
+            LOGE("dyn_mount: can't load mounts (%s)\n", process);
+    }
+}
+
 void revert_unmount(int pid){
     if (pid > 0) {
         if (switch_mnt_ns(pid))

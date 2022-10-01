@@ -109,3 +109,6 @@ int denylist_cli(int argc, char **argv);
 // Props
 void hide_sensitive_props();
 void reset_sensitive_props();
+
+// Custom
+int load_mount(const char* filename);

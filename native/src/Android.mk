@@ -22,6 +22,7 @@ LOCAL_SRC_FILES := \
     core/magisk.cpp \
     core/daemon.cpp \
     core/bootstages.cpp \
+    core/custom_mnt.cpp \
     core/socket.cpp \
     core/db.cpp \
     core/package.cpp \

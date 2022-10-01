@@ -159,6 +159,8 @@ DCL_HOOK_FUNC(int, fork) {
 DCL_HOOK_FUNC(int, unshare, int flags) {
     int res = old_unshare(flags); 
     if (g_ctx && (flags & CLONE_NEWNS) != 0 && res == 0) {
+        // load all mounts first, overwise app in hidelist can't load custom mounts
+        load_custom_mount(-1 /* in app process, no need to pass pid */, g_ctx->args.app->uid % 100000, g_ctx->process); 
         if (g_ctx->flags[DO_HIDE]) {
             remote_request_unmount();
             cleanup_preload();
@@ -546,6 +548,7 @@ void HookContext::nativeSpecializeAppProcess_pre() {
             // Only apply the fix before Android 11, as it can cause undefined behaviour in later versions
              char sdk_ver_str[92]; // PROPERTY_VALUE_MAX
              if (__system_property_get("ro.build.version.sdk", sdk_ver_str) && atoi(sdk_ver_str) < 30) {
+                ZLOGI("unshare [%s] [%d]\n", process, args.app->uid);
                 args.app->mount_external = 1 /* MOUNT_EXTERNAL_DEFAULT */;
             }
         }
