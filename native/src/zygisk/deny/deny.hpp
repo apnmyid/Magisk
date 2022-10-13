@@ -63,6 +63,5 @@ void cleanup_preload();
 // Custom
 void load_custom_mount(int pid, int uid, const char *process);
 
-extern int sys_ui_app_id;
 extern std::atomic<bool> denylist_enforced;
 extern std::atomic<bool> hide_whitelist;
